@@ -141,9 +141,19 @@ def diag():
             return f"HTTP {e.code} " + e.read().decode("utf-8", "replace")
     out.append("getUrl-noid " + api({"module": "study", "resource": "Schedule", "method": "getUrl", "type": "activities"})[:300])
     js = op.open("https://lk.gubkin.ru/" + [x for x in srcs if x.startswith("main-es2015")][0], timeout=25).read().decode("utf-8", "replace")
-    for pat in (r"currentEduInfo\s*=\s*\w", r"set currentEduInfo", r"educations?Info|eduInfos?\b"):
-        for m in list(re.finditer(pat, js))[:2]:
-            out.append("ctx " + " ".join(js[max(0, m.start() - 250): m.end() + 120].split())[:380])
+    m = re.search(r"loadProf\w*\([^)]*\)\{.{0,400}?\{(module:[^}]*)\}", js)
+    out.append("loadProfile " + (m.group(1) if m else "?"))
+    params = dict(re.findall(r'(\w+):"([^"]*)"', m.group(1))) if m else {}
+    prof = json.loads(api(params) or "{}") if params else {}
+    res = prof.get("result", prof)
+    edu = res.get("educationInfo") if isinstance(res, dict) else None
+    out.append(f"profile keys {list(res)[:15] if isinstance(res, dict) else type(res)}")
+    for e in edu or []:
+        sid = e.get("studentId")
+        grp = (e.get("group") or {})
+        out.append(f"edu studentId={sid} group={grp.get('id')} {grp.get('name') or grp.get('title')}")
+        r = api({"module": "study", "resource": "Schedule", "method": "getUrl", "type": "activities", "student_id": sid})
+        out.append("getUrl " + r[:400])
     return out
 
 
