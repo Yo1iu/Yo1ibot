@@ -1,0 +1,61 @@
+name: Загрузить бота в Yandex Cloud
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Установить yc
+        run: |
+          curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash -s -- -i "$HOME/yc" -n
+          echo "$HOME/yc/bin" >> "$GITHUB_PATH"
+
+      - name: Загрузить функцию, хранилище, таймер и webhook
+        env:
+          YC_SA_KEY: ${{ secrets.YC_SA_KEY }}
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+        run: |
+          set -euo pipefail
+          [ -n "$YC_SA_KEY" ] || { echo "::error::Нет секрета YC_SA_KEY"; exit 1; }
+          [ -n "$BOT_TOKEN" ] || { echo "::error::Нет секрета BOT_TOKEN"; exit 1; }
+          printf '%s' "$YC_SA_KEY" > "$RUNNER_TEMP/key.json"
+          yc config profile create bot >/dev/null
+          yc config set service-account-key "$RUNNER_TEMP/key.json"
+          SA_ID=$(jq -r .service_account_id "$RUNNER_TEMP/key.json")
+          FOLDER_ID=$(yc iam service-account get --id "$SA_ID" --format json | jq -r .folder_id)
+          yc config set folder-id "$FOLDER_ID"
+          SECRET=$(printf '%s' "$BOT_TOKEN" | sha256sum | cut -c1-32)
+          echo "::add-mask::$SECRET"
+
+          BUCKET="gubkin-bot-$FOLDER_ID"
+          yc storage bucket get "$BUCKET" >/dev/null 2>&1 || yc storage bucket create --name "$BUCKET" >/dev/null
+
+          yc serverless function get --name gubkin-bot >/dev/null 2>&1 || yc serverless function create --name gubkin-bot >/dev/null
+          FUNC_ID=$(yc serverless function get --name gubkin-bot --format json | jq -r .id)
+          yc serverless function allow-unauthenticated-invoke --name gubkin-bot >/dev/null
+
+          zip -qj bot.zip index.py gubkin_bot.py gubkin_schedule.py
+          yc serverless function version create --function-name gubkin-bot \
+            --runtime python312 --entrypoint index.handler --memory 128m --execution-timeout 60s \
+            --source-path bot.zip --service-account-id "$SA_ID" \
+            --environment "BOT_TOKEN=$BOT_TOKEN,STATE_BUCKET=$BUCKET,WEBHOOK_SECRET=$SECRET" >/dev/null
+
+          yc serverless trigger get --name gubkin-bot-timer >/dev/null 2>&1 || \
+            yc serverless trigger create timer --name gubkin-bot-timer --cron-expression '0/5 * ? * * *' \
+              --invoke-function-id "$FUNC_ID" --invoke-function-service-account-id "$SA_ID" >/dev/null
+
+          curl -sS "https://api.telegram.org/bot$BOT_TOKEN/setWebhook" \
+            -d "url=https://functions.yandexcloud.net/$FUNC_ID" -d "secret_token=$SECRET" \
+            -d 'allowed_updates=["message"]' >/dev/null
+          echo "::notice::webhook $(curl -sS "https://api.telegram.org/bot$BOT_TOKEN/getWebhookInfo" | jq -c '.result | {pending_update_count, last_error_message}')"
+
+          # проверка: один «тик» таймера и последние строки логов функции
+          yc serverless function invoke --name gubkin-bot \
+            -d '{"messages":[{"event_metadata":{"event_type":"yandex.cloud.events.serverless.triggers.TimerMessage"}}]}' >/dev/null || true
+          sleep 5
+          yc serverless function logs gubkin-bot --since 3m 2>/dev/null | grep -vE "^(START|END|REPORT)" | tail -5 | while read -r l; do echo "::notice::log $l"; done || true
+          echo "::notice::готово, функция $FUNC_ID"
