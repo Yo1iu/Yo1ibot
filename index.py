@@ -96,44 +96,53 @@ def webhook(event):
     return {"statusCode": 200, "body": ""}
 
 
-def diag():
-    """Проверка доступа к сайту из облака (вызывается вручную событием {"diag": true})."""
-    import http.cookiejar, re
-    out = []
+def lk_session():
+    """Вход в личный кабинет lk.gubkin.ru. Возвращает opener с cookie сессии."""
+    import http.cookiejar
+    pad = os.environ.get("LK_AUTH", "")
+    login, password = json.loads(base64.urlsafe_b64decode(pad + "=" * (-len(pad) % 4)).decode()) if pad else ("", "")
+    if not login or not password:
+        raise RuntimeError("не заданы LK_LOGIN / LK_PASSWORD")
     op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
-    h = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"}
-    page = op.open(urllib.request.Request("https://lk.gubkin.ru/", headers=h), timeout=15).read().decode("utf-8", "replace")
+    op.addheaders = [("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                                    "(KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"),
+                     ("Accept", "application/json, text/plain, */*")]
+    body = json.dumps({"login": int(login) if login.isdigit() else login,
+                       "password": password, "rememberMe": 1}).encode()
+    req = urllib.request.Request("https://lk.gubkin.ru/api/api.php?module=auth&method=login", data=body,
+                                 headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        resp = json.loads(op.open(req, timeout=20).read().decode())
+    except urllib.error.HTTPError as e:
+        resp = json.loads(e.read().decode() or "{}")
+    if resp.get("success") is not True:
+        raise RuntimeError(f"вход в ЛК не удался: {resp.get('reason')}")
+    return op
+
+
+def diag():
+    """Ищет в личном кабинете метод API с расписанием (вызывается событием {"diag": true})."""
+    import re
+    out = []
+    try:
+        op = lk_session()
+    except Exception as ex:
+        return [f"login: {ex}"]
+    out.append("login ok")
+    page = op.open("https://lk.gubkin.ru/", timeout=15).read().decode("utf-8", "replace")
     srcs = re.findall(r'src=["\']?([^"\' >]+\.js)', page)
-    out.append(f"srcs {srcs}")
+    out.append(f"srcs {srcs[:6]}")
     found = {}
     for src in srcs:
         url = src if src.startswith("http") else "https://lk.gubkin.ru/" + src.lstrip("/")
         try:
-            js = op.open(urllib.request.Request(url, headers=h), timeout=20).read().decode("utf-8", "replace")
-        except Exception as ex:
-            out.append(f"js {src} {ex}")
+            js = op.open(url, timeout=25).read().decode("utf-8", "replace")
+        except Exception:
             continue
         for m in re.finditer(r"module=([A-Za-z_]+)&method=([A-Za-z_]+)", js):
             found.setdefault(m.group(1), set()).add(m.group(2))
-        for m in re.finditer(r"(timetable|schedule|raspis)", js, re.I):
-            ctx = js[max(0, m.start() - 100): m.end() + 100]
-            if "method" in ctx or "module" in ctx:
-                found.setdefault("_ctx", set()).add(" ".join(ctx.split())[:200])
-    js = op.open(urllib.request.Request("https://lk.gubkin.ru/login/js/" + [x for x in srcs if "app." in x][0].split("/")[-1], headers=h), timeout=20).read().decode("utf-8", "replace")
-    for m in list(re.finditer(r"location|redirect|href", js))[:40]:
-        c = " ".join(js[max(0, m.start() - 60): m.end() + 90].split())
-        if "/" in c and ("login" in c or "success" in c or "href" in c):
-            found.setdefault("_loc", []).append(c[:170])
-    for c in found.get("_loc", [])[:6]:
-        out.append("loc " + c)
     for k in sorted(found):
-        if k == "_loc":
-            continue
-        if k == "_ctx":
-            continue
-        out.append(f"{k}: {sorted(found[k])}")
-    for c in list(found.get("_ctx", []))[:3]:
-        out.append("ctx " + c)
+        out.append(f"{k}: {' '.join(sorted(found[k]))}"[:400])
     return out
 
 

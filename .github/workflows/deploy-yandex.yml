@@ -19,6 +19,8 @@ jobs:
         env:
           YC_SA_KEY: ${{ secrets.YC_SA_KEY }}
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          LK_LOGIN: ${{ secrets.LK_LOGIN }}
+          LK_PASSWORD: ${{ secrets.LK_PASSWORD }}
         run: |
           set -Eeuo pipefail
           exec 2> >(tee "$RUNNER_TEMP/err.log" >&2)
@@ -51,6 +53,9 @@ jobs:
           FOLDER_ID=$(yc iam service-account get --id "$SA_ID" --format json | jq -r .folder_id)
           yc config set folder-id "$FOLDER_ID"
           SECRET=$(printf '%s' "$BOT_TOKEN" | sha256sum | cut -c1-32)
+          # логин и пароль кодируем, чтобы запятые и знаки = в пароле не сломали настройки функции
+          LK_B64=$(python3 -c 'import base64,json,os;print(base64.urlsafe_b64encode(json.dumps([os.environ.get("LK_LOGIN","").strip(),os.environ.get("LK_PASSWORD","")]).encode()).decode().rstrip("="))')
+          echo "::add-mask::$LK_B64"
           echo "::add-mask::$SECRET"
 
           echo "::notice::этап: ключ принят, каталог найден"
@@ -66,7 +71,7 @@ jobs:
           timeout 300 yc serverless function version create --function-name gubkin-bot \
             --runtime python312 --entrypoint index.handler --memory 128m --execution-timeout 180s \
             --source-path bot.zip --service-account-id "$SA_ID" \
-            --environment "BOT_TOKEN=$BOT_TOKEN,STATE_BUCKET=$BUCKET,WEBHOOK_SECRET=$SECRET" >/dev/null
+            --environment "BOT_TOKEN=$BOT_TOKEN,STATE_BUCKET=$BUCKET,WEBHOOK_SECRET=$SECRET,LK_AUTH=$LK_B64" >/dev/null
 
           echo "::notice::этап: код функции загружен"
           yc serverless trigger get --name gubkin-bot-timer >/dev/null 2>&1 || \
