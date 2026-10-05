@@ -113,12 +113,11 @@ def diag():
     page = op.open(urllib.request.Request("https://lk.gubkin.ru/schedule/", headers=h), timeout=10).read().decode()
     src = re.findall(r'src="(main[^"]+)"', page)[0]
     js = op.open(urllib.request.Request("https://lk.gubkin.ru/schedule/" + src, headers=h), timeout=20).read().decode("utf-8", "replace")
-    for m in list(re.finditer(r"domain:", js))[:4]:
-        out.append("domain " + js[max(0, m.start() - 120): m.end() + 120])
-    steps = [("html", "https://lk.gubkin.ru/schedule/"),
-             ("captcha", "https://lk.gubkin.ru/schedule/api/api.php?act=Captcha&method=generateCaptcha"),
-                          ("lk-sched-noslash", "https://lk.gubkin.ru/schedule/api/api.php"),
-             ("lk-api", "https://lk.gubkin.ru/api/api.php?module=auth&method=check")]
+    m = re.search(r"cis\.gubkin\.ru", js)
+    out.append("domain " + js[m.start() - 20: m.end() + 260])
+    steps = [("cis", "https://cis.gubkin.ru/api/api.php?act=meta"),
+             ("cis-sched", "https://cis.gubkin.ru/schedule/api/api.php?act=meta"),
+                          ("lk-api", "https://lk.gubkin.ru/api/api.php?module=auth&method=check")]
     for name, url in steps:
         t0 = time.time()
         try:
