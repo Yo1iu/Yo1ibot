@@ -109,11 +109,16 @@ def diag():
               "Sec-Fetch-Mode": "cors", "Sec-Fetch-Dest": "empty", "Connection": "keep-alive",
               "sec-ch-ua": '"Chromium";v="140", "Not=A?Brand";v="24", "Google Chrome";v="140"',
               "sec-ch-ua-mobile": "?0", "sec-ch-ua-platform": '"Windows"'})
+    import re
+    page = op.open(urllib.request.Request("https://lk.gubkin.ru/schedule/", headers=h), timeout=10).read().decode()
+    src = re.findall(r'src="(main[^"]+)"', page)[0]
+    js = op.open(urllib.request.Request("https://lk.gubkin.ru/schedule/" + src, headers=h), timeout=20).read().decode("utf-8", "replace")
+    for m in list(re.finditer(r"domain:", js))[:4]:
+        out.append("domain " + js[max(0, m.start() - 120): m.end() + 120])
     steps = [("html", "https://lk.gubkin.ru/schedule/"),
              ("captcha", "https://lk.gubkin.ru/schedule/api/api.php?act=Captcha&method=generateCaptcha"),
-             ("meta", "https://lk.gubkin.ru/schedule/api/api.php?act=meta"),
-             ("lk-root", "https://lk.gubkin.ru/"),
-             ("lk-api", "https://lk.gubkin.ru/api/api.php")]
+                          ("lk-sched-noslash", "https://lk.gubkin.ru/schedule/api/api.php"),
+             ("lk-api", "https://lk.gubkin.ru/api/api.php?module=auth&method=check")]
     for name, url in steps:
         t0 = time.time()
         try:
