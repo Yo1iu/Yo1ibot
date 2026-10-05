@@ -141,21 +141,16 @@ def diag():
             return f"HTTP {e.code} " + e.read().decode("utf-8", "replace")
     out.append("getUrl-noid " + api({"module": "study", "resource": "Schedule", "method": "getUrl", "type": "activities"})[:300])
     js = op.open("https://lk.gubkin.ru/" + [x for x in srcs if x.startswith("main-es2015")][0], timeout=25).read().decode("utf-8", "replace")
-    m = re.search(r"loadProf\w*\([^)]*\)\{.{0,400}?\{(module:[^}]*)\}", js)
-    out.append("loadProfile " + (m.group(1) if m else "?"))
-    params = dict(re.findall(r'(\w+):"([^"]*)"', m.group(1))) if m else {}
-    prof = json.loads(api(params) or "{}") if params else {}
-    res = prof.get("result", prof)
-    edu = (res.get("educationInfo") or res.get("educations")) if isinstance(res, dict) else None
-    if edu:
-        out.append(f"edu keys {list(edu[0])}")
-    out.append(f"profile keys {list(res)[:15] if isinstance(res, dict) else type(res)}")
-    for e in edu or []:
-        sid = e.get("studentId") or e.get("student_id") or e.get("id")
-        grp = (e.get("group") or {})
-        out.append(f"edu studentId={sid} group={grp.get('id')} {grp.get('name') or grp.get('title')}")
-        r = api({"module": "study", "resource": "Schedule", "method": "getUrl", "type": "activities", "student_id": sid})
-        out.append("getUrl " + r[:400])
+    calls = set(re.findall(r'module:"(\w+)",resource:"(\w+)",method:"(\w+)"', js))
+    out.append(f"calls {len(calls)}")
+    line = ""
+    for mod, res_, meth in sorted(calls):
+        item = f"{mod}.{res_}.{meth} "
+        if len(line) + len(item) > 900:
+            out.append("calls " + line)
+            line = ""
+        line += item
+    out.append("calls " + line)
     return out
 
 
