@@ -146,10 +146,12 @@ def diag():
     params = dict(re.findall(r'(\w+):"([^"]*)"', m.group(1))) if m else {}
     prof = json.loads(api(params) or "{}") if params else {}
     res = prof.get("result", prof)
-    edu = res.get("educationInfo") if isinstance(res, dict) else None
+    edu = (res.get("educationInfo") or res.get("educations")) if isinstance(res, dict) else None
+    if edu:
+        out.append(f"edu keys {list(edu[0])}")
     out.append(f"profile keys {list(res)[:15] if isinstance(res, dict) else type(res)}")
     for e in edu or []:
-        sid = e.get("studentId")
+        sid = e.get("studentId") or e.get("student_id") or e.get("id")
         grp = (e.get("group") or {})
         out.append(f"edu studentId={sid} group={grp.get('id')} {grp.get('name') or grp.get('title')}")
         r = api({"module": "study", "resource": "Schedule", "method": "getUrl", "type": "activities", "student_id": sid})
