@@ -9,6 +9,7 @@
 """
 
 import base64
+import urllib.parse
 import json
 import os
 import time
@@ -132,28 +133,17 @@ def diag():
     page = op.open("https://lk.gubkin.ru/", timeout=15).read().decode("utf-8", "replace")
     srcs = re.findall(r'src=["\']?([^"\' >]+\.js)', page)
     out.append(f"srcs {srcs[:6]}")
-    rt = op.open("https://lk.gubkin.ru/" + [x for x in srcs if x.startswith("runtime-es2015")][0], timeout=20).read().decode("utf-8", "replace")
-    chunks = re.findall(r'"?([\w-]+)"?:"([0-9a-f]{20})"', rt)
-    out.append(f"chunks {len(chunks)}: {[c[0] for c in chunks][:25]}")
-    files = [x for x in srcs if x.startswith("main-es2015")] + [f"{n}-es2015.{h}.js" for n, h in chunks]
-    mods, ctx = set(), []
-    for f in files:
+    def api(params):
+        url = "https://lk.gubkin.ru/api/api.php?" + urllib.parse.urlencode(params)
         try:
-            js = op.open("https://lk.gubkin.ru/" + f, timeout=25).read().decode("utf-8", "replace")
-        except Exception as ex:
-            continue
-        for m in re.finditer(r"module=([A-Za-z_]+)|module:\s*[\"']([A-Za-z_]+)|method=([A-Za-z_]+)|method:\s*[\"']([A-Za-z_]+)", js):
-            mods.add(next(g for g in m.groups() if g))
-        for pat in (r"getResult\(\w+\)\{", r"getResult\([^)]*\)\{", r"currentEduInfo=", r"studentId:", r"getEduInfo|getEducations|eduInfo"):
-            m = re.search(pat, js)
-            if m and len(ctx) < 9:
-                ctx.append(f"{pat[:12]}: " + " ".join(js[max(0, m.start() - 60): m.end() + 260].split()))
-        for m in []:
-            c = " ".join(js[max(0, m.start() - 110): m.end() + 110].split())
-            if "api" in c and len(ctx) < 5:
-                ctx.append(f"{f[:20]}: {c}")
-
-    out += ["ctx " + c[:330] for c in ctx]
+            return op.open(url, timeout=25).read().decode("utf-8", "replace")
+        except urllib.error.HTTPError as e:
+            return f"HTTP {e.code} " + e.read().decode("utf-8", "replace")
+    out.append("getUrl-noid " + api({"module": "study", "resource": "Schedule", "method": "getUrl", "type": "activities"})[:300])
+    js = op.open("https://lk.gubkin.ru/" + [x for x in srcs if x.startswith("main-es2015")][0], timeout=25).read().decode("utf-8", "replace")
+    for pat in (r"currentEduInfo\s*=\s*\w", r"set currentEduInfo", r"educations?Info|eduInfos?\b"):
+        for m in list(re.finditer(pat, js))[:2]:
+            out.append("ctx " + " ".join(js[max(0, m.start() - 250): m.end() + 120].split())[:380])
     return out
 
 
