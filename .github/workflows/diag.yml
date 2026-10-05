@@ -1,0 +1,12 @@
+name: Проверка доступа к сайту
+on: workflow_dispatch
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          curl -s https://ipinfo.io/json | grep -E '"(ip|country|org)"' || true
+          for u in https://lk.gubkin.ru/schedule/ https://gubkin.ru/ https://ya.ru/; do
+            echo "== $u"; curl -sS -o /dev/null -m 30 -w "code=%{http_code} connect=%{time_connect}s total=%{time_total}s ip=%{remote_ip}\n" "$u" || true
+          done
+          getent hosts lk.gubkin.ru || true
