@@ -6,6 +6,7 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -52,6 +53,7 @@ jobs:
           SECRET=$(printf '%s' "$BOT_TOKEN" | sha256sum | cut -c1-32)
           echo "::add-mask::$SECRET"
 
+          echo "::notice::этап: ключ принят, каталог найден"
           BUCKET="gubkin-bot-$FOLDER_ID"
           yc storage bucket get "$BUCKET" >/dev/null 2>&1 || yc storage bucket create --name "$BUCKET" >/dev/null
 
@@ -59,24 +61,27 @@ jobs:
           FUNC_ID=$(yc serverless function get --name gubkin-bot --format json | jq -r .id)
           yc serverless function allow-unauthenticated-invoke --name gubkin-bot >/dev/null
 
+          echo "::notice::этап: хранилище и функция созданы"
           zip -qj bot.zip index.py gubkin_bot.py gubkin_schedule.py
-          yc serverless function version create --function-name gubkin-bot \
+          timeout 300 yc serverless function version create --function-name gubkin-bot \
             --runtime python312 --entrypoint index.handler --memory 128m --execution-timeout 60s \
             --source-path bot.zip --service-account-id "$SA_ID" \
             --environment "BOT_TOKEN=$BOT_TOKEN,STATE_BUCKET=$BUCKET,WEBHOOK_SECRET=$SECRET" >/dev/null
 
+          echo "::notice::этап: код функции загружен"
           yc serverless trigger get --name gubkin-bot-timer >/dev/null 2>&1 || \
             yc serverless trigger create timer --name gubkin-bot-timer --cron-expression '0/5 * ? * * *' \
               --invoke-function-id "$FUNC_ID" --invoke-function-service-account-id "$SA_ID" >/dev/null
 
-          curl -sS "https://api.telegram.org/bot$BOT_TOKEN/setWebhook" \
+          echo "::notice::этап: таймер создан"
+          curl -sS -m 30 "https://api.telegram.org/bot$BOT_TOKEN/setWebhook" \
             -d "url=https://functions.yandexcloud.net/$FUNC_ID" -d "secret_token=$SECRET" \
             -d 'allowed_updates=["message"]' >/dev/null
-          echo "::notice::webhook $(curl -sS "https://api.telegram.org/bot$BOT_TOKEN/getWebhookInfo" | jq -c '.result | {pending_update_count, last_error_message}')"
+          echo "::notice::webhook $(curl -sS -m 30 "https://api.telegram.org/bot$BOT_TOKEN/getWebhookInfo" | jq -c '.result | {pending_update_count, last_error_message}')"
 
           # проверка: один «тик» таймера и последние строки логов функции
-          yc serverless function invoke --name gubkin-bot \
+          timeout 90 yc serverless function invoke --name gubkin-bot \
             -d '{"messages":[{"event_metadata":{"event_type":"yandex.cloud.events.serverless.triggers.TimerMessage"}}]}' >/dev/null || true
           sleep 5
-          yc serverless function logs gubkin-bot --since 3m 2>/dev/null | grep -vE "^(START|END|REPORT)" | tail -5 | while read -r l; do echo "::notice::log $l"; done || true
+          timeout 60 yc serverless function logs gubkin-bot --since 3m 2>/dev/null | grep -vE "^(START|END|REPORT)" | tail -5 | while read -r l; do echo "::notice::log $l"; done || true
           echo "::notice::готово, функция $FUNC_ID"
