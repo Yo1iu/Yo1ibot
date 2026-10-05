@@ -64,7 +64,7 @@ jobs:
           echo "::notice::этап: хранилище и функция созданы"
           zip -qj bot.zip index.py gubkin_bot.py gubkin_schedule.py
           timeout 300 yc serverless function version create --function-name gubkin-bot \
-            --runtime python312 --entrypoint index.handler --memory 128m --execution-timeout 60s \
+            --runtime python312 --entrypoint index.handler --memory 128m --execution-timeout 120s \
             --source-path bot.zip --service-account-id "$SA_ID" \
             --environment "BOT_TOKEN=$BOT_TOKEN,STATE_BUCKET=$BUCKET,WEBHOOK_SECRET=$SECRET" >/dev/null
 

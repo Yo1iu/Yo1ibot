@@ -111,7 +111,6 @@ def diag():
                  "sec-ch-ua": '"Chromium";v="140", "Not=A?Brand";v="24", "Google Chrome";v="140"',
                  "sec-ch-ua-mobile": "?0", "sec-ch-ua-platform": '"Windows"'},
         "android": {"User-Agent": "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Mobile Safari/537.36"},
-        "bare": {},
     }
     d = bot.now().date()
     api = f"https://lk.gubkin.ru/schedule/api/api.php?act=schedule&date={d.day}-{d.month}-{d.year}&groupId=9685"
@@ -120,15 +119,16 @@ def diag():
         op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
         for url, accept in (("https://lk.gubkin.ru/schedule/", "text/html,*/*"), (api, "application/json, text/plain, */*")):
             req = urllib.request.Request(url, headers={**h, "Accept": accept, "Referer": "https://lk.gubkin.ru/schedule/"})
+            t0 = time.time()
             try:
-                with op.open(req, timeout=20) as r:
+                with op.open(req, timeout=8) as r:
                     code, hdrs, body = r.status, r.headers, r.read(400)
             except urllib.error.HTTPError as e:
                 code, hdrs, body = e.code, e.headers, e.read(400)
             except Exception as ex:
                 code, hdrs, body = type(ex).__name__, {}, str(ex).encode()
             server = hdrs.get("Server", "") if hdrs else ""
-            out.append(f"{name} {'html' if url.endswith('/') else 'api'} {code} server={server} "
+            out.append(f"{name} {'html' if url.endswith('/') else 'api'} {code} {time.time() - t0:.1f}s server={server} "
                        f"cookies={[c.name for c in jar]} body={body[:160].decode('utf-8', 'replace')!r}")
     return out
 
