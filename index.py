@@ -104,16 +104,23 @@ def diag():
     h = {"User-Agent": "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Mobile Safari/537.36",
          "Referer": "https://lk.gubkin.ru/schedule/", "Accept": "application/json, text/plain, */*"}
     d = bot.now().date()
+    h.update({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+              "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7", "Sec-Fetch-Site": "same-origin",
+              "Sec-Fetch-Mode": "cors", "Sec-Fetch-Dest": "empty", "Connection": "keep-alive",
+              "sec-ch-ua": '"Chromium";v="140", "Not=A?Brand";v="24", "Google Chrome";v="140"',
+              "sec-ch-ua-mobile": "?0", "sec-ch-ua-platform": '"Windows"'})
     steps = [("html", "https://lk.gubkin.ru/schedule/"),
+             ("captcha", "https://lk.gubkin.ru/schedule/api/api.php?act=Captcha&method=generateCaptcha"),
              ("meta", "https://lk.gubkin.ru/schedule/api/api.php?act=meta"),
-             ("studies", "https://lk.gubkin.ru/schedule/api/api.php?act=list&method=getStudies"),
-             ("faculties", "https://lk.gubkin.ru/schedule/api/api.php?act=list&method=getFaculties"),
-             ("schedule", f"https://lk.gubkin.ru/schedule/api/api.php?act=schedule&date={d.day}-{d.month}-{d.year}&groupId=9685")]
+             ("lk-root", "https://lk.gubkin.ru/"),
+             ("lk-api", "https://lk.gubkin.ru/api/api.php")]
     for name, url in steps:
         t0 = time.time()
         try:
-            with op.open(urllib.request.Request(url, headers=h), timeout=35) as r:
+            with op.open(urllib.request.Request(url, headers=h), timeout=30) as r:
                 code, body = r.status, r.read(250)
+                if name == 'captcha':
+                    body = (r.headers.get('Content-Type', '') + ' ' + str(len(body))).encode()
         except urllib.error.HTTPError as e:
             code, body = e.code, e.read(250)
         except Exception as ex:
