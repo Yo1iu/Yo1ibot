@@ -98,39 +98,33 @@ def webhook(event):
 
 def diag():
     """Проверка доступа к сайту из облака (вызывается вручную событием {"diag": true})."""
-    import http.cookiejar
+    import http.cookiejar, re
     out = []
-    jar = http.cookiejar.CookieJar()
-    op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
-    h = {"User-Agent": "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Mobile Safari/537.36",
-         "Referer": "https://lk.gubkin.ru/schedule/", "Accept": "application/json, text/plain, */*"}
-    d = bot.now().date()
-    h.update({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
-              "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7", "Sec-Fetch-Site": "same-origin",
-              "Sec-Fetch-Mode": "cors", "Sec-Fetch-Dest": "empty", "Connection": "keep-alive",
-              "sec-ch-ua": '"Chromium";v="140", "Not=A?Brand";v="24", "Google Chrome";v="140"',
-              "sec-ch-ua-mobile": "?0", "sec-ch-ua-platform": '"Windows"'})
-    import re
-    page = op.open(urllib.request.Request("https://lk.gubkin.ru/schedule/", headers=h), timeout=10).read().decode()
-    src = re.findall(r'src="(main[^"]+)"', page)[0]
-    js = op.open(urllib.request.Request("https://lk.gubkin.ru/schedule/" + src, headers=h), timeout=20).read().decode("utf-8", "replace")
-
-    steps = [("lk-timetable", "https://lk.gubkin.ru/api/api.php?module=study&method=timetable"),
-             ("lk-bogus", "https://lk.gubkin.ru/api/api.php?module=study&method=nosuchmethod"),
-             ("lk-schedule", "https://lk.gubkin.ru/api/api.php?module=schedule&method=get"),
-                          ("lk-api", "https://lk.gubkin.ru/api/api.php?module=auth&method=check")][:4]
-    for name, url in steps:
-        t0 = time.time()
+    op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+    h = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"}
+    page = op.open(urllib.request.Request("https://lk.gubkin.ru/", headers=h), timeout=15).read().decode("utf-8", "replace")
+    srcs = re.findall(r'src=["\']?([^"\' >]+\.js)', page)
+    out.append(f"srcs {srcs}")
+    found = {}
+    for src in srcs:
+        url = src if src.startswith("http") else "https://lk.gubkin.ru/" + src.lstrip("/")
         try:
-            with op.open(urllib.request.Request(url, headers=h), timeout=30) as r:
-                code, body = r.status, r.read(250)
-                if name == 'captcha':
-                    body = (r.headers.get('Content-Type', '') + ' ' + str(len(body))).encode()
-        except urllib.error.HTTPError as e:
-            code, body = e.code, e.read(250)
+            js = op.open(urllib.request.Request(url, headers=h), timeout=20).read().decode("utf-8", "replace")
         except Exception as ex:
-            code, body = type(ex).__name__, str(ex).encode()
-        out.append(f"{name} {code} {time.time() - t0:.1f}s cookies={[c.name for c in jar]} body={body.decode('utf-8', 'replace')!r}")
+            out.append(f"js {src} {ex}")
+            continue
+        for m in re.finditer(r"module=([A-Za-z_]+)&method=([A-Za-z_]+)", js):
+            found.setdefault(m.group(1), set()).add(m.group(2))
+        for m in re.finditer(r"(timetable|schedule|raspis)", js, re.I):
+            ctx = js[max(0, m.start() - 100): m.end() + 100]
+            if "method" in ctx or "module" in ctx:
+                found.setdefault("_ctx", set()).add(" ".join(ctx.split())[:200])
+    for k in sorted(found):
+        if k == "_ctx":
+            continue
+        out.append(f"{k}: {sorted(found[k])}")
+    for c in list(found.get("_ctx", []))[:3]:
+        out.append("ctx " + c)
     return out
 
 
