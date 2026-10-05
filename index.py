@@ -97,41 +97,28 @@ def webhook(event):
 
 def diag():
     """Проверка доступа к сайту из облака (вызывается вручную событием {"diag": true})."""
-    import http.cookiejar, re
+    import http.cookiejar
     out = []
     jar = http.cookiejar.CookieJar()
     op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
     h = {"User-Agent": "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Mobile Safari/537.36",
-         "Referer": "https://lk.gubkin.ru/schedule/"}
-    page = op.open(urllib.request.Request("https://lk.gubkin.ru/schedule/", headers={**h, "Accept": "text/html"}), timeout=10).read().decode("utf-8", "replace")
-    scripts = re.findall(r"<script[^>]*>(.*?)</script>", page, re.S)
-    srcs = re.findall(r'<script[^>]+src="([^"]+)"', page)
-    out.append(f"srcs {srcs[:8]} inline={len(scripts)}")
-    for sc in scripts[:3]:
-        sc = " ".join(sc.split())
-        for i in range(0, min(len(sc), 900), 300):
-            out.append("js " + sc[i:i + 300])
-    js = op.open(urllib.request.Request("https://lk.gubkin.ru/schedule/" + srcs[-1], headers=h), timeout=20).read().decode("utf-8", "replace")
-    out.append(f"mainjs {len(js)}")
-    seen = 0
-    for pat in (r"api\.php", r"setHeaders|HttpHeaders\(|headers:\{", r"\b418\b", r"withCredentials", r"[Cc]aptcha"):
-        for m in list(re.finditer(pat, js))[:2]:
-            if seen >= 7:
-                break
-            out.append(f"{pat}: " + js[max(0, m.start() - 160): m.end() + 160])
-            seen += 1
-    return out
+         "Referer": "https://lk.gubkin.ru/schedule/", "Accept": "application/json, text/plain, */*"}
     d = bot.now().date()
-    api = f"https://lk.gubkin.ru/schedule/api/api.php?act=schedule&date={d.day}-{d.month}-{d.year}&groupId=9685"
-    t0 = time.time()
-    try:
-        with op.open(urllib.request.Request(api, headers={**h, "Accept": "application/json, text/plain, */*"}), timeout=90) as r:
-            code, body = r.status, r.read(300)
-    except urllib.error.HTTPError as e:
-        code, body = e.code, e.read(300)
-    except Exception as ex:
-        code, body = type(ex).__name__, str(ex).encode()
-    out.append(f"api {code} {time.time() - t0:.1f}s cookies={[c.name for c in jar]} body={body.decode('utf-8', 'replace')!r}")
+    steps = [("html", "https://lk.gubkin.ru/schedule/"),
+             ("meta", "https://lk.gubkin.ru/schedule/api/api.php?act=meta"),
+             ("studies", "https://lk.gubkin.ru/schedule/api/api.php?act=list&method=getStudies"),
+             ("faculties", "https://lk.gubkin.ru/schedule/api/api.php?act=list&method=getFaculties"),
+             ("schedule", f"https://lk.gubkin.ru/schedule/api/api.php?act=schedule&date={d.day}-{d.month}-{d.year}&groupId=9685")]
+    for name, url in steps:
+        t0 = time.time()
+        try:
+            with op.open(urllib.request.Request(url, headers=h), timeout=35) as r:
+                code, body = r.status, r.read(250)
+        except urllib.error.HTTPError as e:
+            code, body = e.code, e.read(250)
+        except Exception as ex:
+            code, body = type(ex).__name__, str(ex).encode()
+        out.append(f"{name} {code} {time.time() - t0:.1f}s cookies={[c.name for c in jar]} body={body.decode('utf-8', 'replace')!r}")
     return out
 
 
