@@ -5,8 +5,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: |
-          curl -s https://ipinfo.io/json | grep -E '"(ip|country|org)"' || true
+          echo "::notice::runner $(curl -s https://ipinfo.io/json | tr -d '\n ' | head -c 200)"
           for u in https://lk.gubkin.ru/schedule/ https://gubkin.ru/ https://ya.ru/; do
-            echo "== $u"; curl -sS -o /dev/null -m 30 -w "code=%{http_code} connect=%{time_connect}s total=%{time_total}s ip=%{remote_ip}\n" "$u" || true
+            r=$(curl -sS -o /dev/null -m 30 -w "code=%{http_code} connect=%{time_connect}s total=%{time_total}s ip=%{remote_ip}" "$u" 2>&1)
+            echo "::notice::$u $r"
           done
-          getent hosts lk.gubkin.ru || true
+          echo "::notice::dns $(getent hosts lk.gubkin.ru)"
