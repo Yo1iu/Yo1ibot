@@ -44,6 +44,7 @@ jobs:
           json.dump(k, open(os.environ["RUNNER_TEMP"] + "/key.json", "w"))
           PY
           yc config profile create bot >/dev/null
+          yc config set endpoint api.cloud.yandex.net:443
           yc config set service-account-key "$RUNNER_TEMP/key.json"
           SA_ID=$(jq -r .service_account_id "$RUNNER_TEMP/key.json")
           FOLDER_ID=$(yc iam service-account get --id "$SA_ID" --format json | jq -r .folder_id)
