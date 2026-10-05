@@ -119,7 +119,16 @@ def diag():
             ctx = js[max(0, m.start() - 100): m.end() + 100]
             if "method" in ctx or "module" in ctx:
                 found.setdefault("_ctx", set()).add(" ".join(ctx.split())[:200])
+    js = op.open(urllib.request.Request("https://lk.gubkin.ru/login/js/" + [x for x in srcs if "app." in x][0].split("/")[-1], headers=h), timeout=20).read().decode("utf-8", "replace")
+    for m in list(re.finditer(r"location|redirect|href", js))[:40]:
+        c = " ".join(js[max(0, m.start() - 60): m.end() + 90].split())
+        if "/" in c and ("login" in c or "success" in c or "href" in c):
+            found.setdefault("_loc", []).append(c[:170])
+    for c in found.get("_loc", [])[:6]:
+        out.append("loc " + c)
     for k in sorted(found):
+        if k == "_loc":
+            continue
         if k == "_ctx":
             continue
         out.append(f"{k}: {sorted(found[k])}")
