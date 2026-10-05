@@ -19,7 +19,9 @@ jobs:
           YC_SA_KEY: ${{ secrets.YC_SA_KEY }}
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         run: |
-          set -euo pipefail
+          set -Eeuo pipefail
+          exec 2> >(tee "$RUNNER_TEMP/err.log" >&2)
+          trap 'echo "::error::Строка $LINENO: $BASH_COMMAND"; tail -5 "$RUNNER_TEMP/err.log" | while read -r l; do echo "::error::$l"; done' ERR
           [ -n "$YC_SA_KEY" ] || { echo "::error::Нет секрета YC_SA_KEY"; exit 1; }
           [ -n "$BOT_TOKEN" ] || { echo "::error::Нет секрета BOT_TOKEN"; exit 1; }
           printf '%s' "$YC_SA_KEY" > "$RUNNER_TEMP/key.json"
