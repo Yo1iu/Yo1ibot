@@ -111,6 +111,16 @@ def diag():
         sc = " ".join(sc.split())
         for i in range(0, min(len(sc), 900), 300):
             out.append("js " + sc[i:i + 300])
+    js = op.open(urllib.request.Request("https://lk.gubkin.ru/schedule/" + srcs[-1], headers=h), timeout=20).read().decode("utf-8", "replace")
+    out.append(f"mainjs {len(js)}")
+    seen = 0
+    for pat in (r"api\.php", r"setHeaders|HttpHeaders\(|headers:\{", r"\b418\b", r"withCredentials", r"[Cc]aptcha"):
+        for m in list(re.finditer(pat, js))[:2]:
+            if seen >= 7:
+                break
+            out.append(f"{pat}: " + js[max(0, m.start() - 160): m.end() + 160])
+            seen += 1
+    return out
     d = bot.now().date()
     api = f"https://lk.gubkin.ru/schedule/api/api.php?act=schedule&date={d.day}-{d.month}-{d.year}&groupId=9685"
     t0 = time.time()
