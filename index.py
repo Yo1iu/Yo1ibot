@@ -144,12 +144,16 @@ def diag():
             continue
         for m in re.finditer(r"module=([A-Za-z_]+)|module:\s*[\"']([A-Za-z_]+)|method=([A-Za-z_]+)|method:\s*[\"']([A-Za-z_]+)", js):
             mods.add(next(g for g in m.groups() if g))
-        for m in re.finditer(r"timetable|[Ss]chedule|[Rr]aspis|[Pp]ary", js):
+        for pat in (r"getResult\(\w+\)\{", r"getResult\([^)]*\)\{", r"currentEduInfo=", r"studentId:", r"getEduInfo|getEducations|eduInfo"):
+            m = re.search(pat, js)
+            if m and len(ctx) < 9:
+                ctx.append(f"{pat[:12]}: " + " ".join(js[max(0, m.start() - 60): m.end() + 260].split()))
+        for m in []:
             c = " ".join(js[max(0, m.start() - 110): m.end() + 110].split())
             if "api" in c and len(ctx) < 5:
                 ctx.append(f"{f[:20]}: {c}")
-    out.append("names " + " ".join(sorted(mods))[:900])
-    out += ["ctx " + c[:240] for c in ctx]
+
+    out += ["ctx " + c[:330] for c in ctx]
     return out
 
 
