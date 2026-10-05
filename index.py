@@ -20,6 +20,7 @@ import gubkin_bot as bot
 BUCKET = os.environ.get("STATE_BUCKET", "")
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "")
 STATE_KEY = "state.json"
+PAUSED = True   # сайт расписания не пускает облачные IP — временно не ходим на него
 
 _token = None      # IAM-токен сервисного аккаунта функции
 _saved = None      # что последний раз записали, чтобы не писать лишний раз
@@ -138,6 +139,15 @@ def handler(event, context):
     if isinstance(event, dict) and event.get("diag"):
         return {"statusCode": 200, "body": json.dumps(diag(), ensure_ascii=False)}
     _token = context.token["access_token"]
+    if PAUSED:
+        if not _is_timer(event):
+            try:
+                msg = json.loads(event.get("body") or "{}").get("message") or {}
+                if msg.get("chat"):
+                    bot.send(msg["chat"]["id"], "🛠 Бот настраивается — скоро заработает.")
+            except Exception:
+                pass
+        return {"statusCode": 200, "body": "paused"}
     if _is_timer(event):
         tick()
         return {"statusCode": 200, "body": "tick"}
