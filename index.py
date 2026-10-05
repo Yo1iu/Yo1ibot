@@ -132,17 +132,24 @@ def diag():
     page = op.open("https://lk.gubkin.ru/", timeout=15).read().decode("utf-8", "replace")
     srcs = re.findall(r'src=["\']?([^"\' >]+\.js)', page)
     out.append(f"srcs {srcs[:6]}")
-    found = {}
-    for src in srcs:
-        url = src if src.startswith("http") else "https://lk.gubkin.ru/" + src.lstrip("/")
+    rt = op.open("https://lk.gubkin.ru/" + [x for x in srcs if x.startswith("runtime-es2015")][0], timeout=20).read().decode("utf-8", "replace")
+    chunks = re.findall(r'"?([\w-]+)"?:"([0-9a-f]{20})"', rt)
+    out.append(f"chunks {len(chunks)}: {[c[0] for c in chunks][:25]}")
+    files = [x for x in srcs if x.startswith("main-es2015")] + [f"{n}-es2015.{h}.js" for n, h in chunks]
+    mods, ctx = set(), []
+    for f in files:
         try:
-            js = op.open(url, timeout=25).read().decode("utf-8", "replace")
-        except Exception:
+            js = op.open("https://lk.gubkin.ru/" + f, timeout=25).read().decode("utf-8", "replace")
+        except Exception as ex:
             continue
-        for m in re.finditer(r"module=([A-Za-z_]+)&method=([A-Za-z_]+)", js):
-            found.setdefault(m.group(1), set()).add(m.group(2))
-    for k in sorted(found):
-        out.append(f"{k}: {' '.join(sorted(found[k]))}"[:400])
+        for m in re.finditer(r"module=([A-Za-z_]+)|module:\s*[\"']([A-Za-z_]+)|method=([A-Za-z_]+)|method:\s*[\"']([A-Za-z_]+)", js):
+            mods.add(next(g for g in m.groups() if g))
+        for m in re.finditer(r"timetable|[Ss]chedule|[Rr]aspis|[Pp]ary", js):
+            c = " ".join(js[max(0, m.start() - 110): m.end() + 110].split())
+            if "api" in c and len(ctx) < 5:
+                ctx.append(f"{f[:20]}: {c}")
+    out.append("names " + " ".join(sorted(mods))[:900])
+    out += ["ctx " + c[:240] for c in ctx]
     return out
 
 
