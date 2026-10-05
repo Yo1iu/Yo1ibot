@@ -114,9 +114,10 @@ def diag():
     src = re.findall(r'src="(main[^"]+)"', page)[0]
     js = op.open(urllib.request.Request("https://lk.gubkin.ru/schedule/" + src, headers=h), timeout=20).read().decode("utf-8", "replace")
 
-    steps = [("cis-meta", "https://cis.gubkin.ru/lk_schedule/api/api.php?act=meta"),
-             ("cis-schedule", f"https://cis.gubkin.ru/lk_schedule/api/api.php?act=schedule&date={d.day}-{d.month}-{d.year}&groupId=9685"),
-                          ("lk-api", "https://lk.gubkin.ru/api/api.php?module=auth&method=check")]
+    steps = [("lk-timetable", "https://lk.gubkin.ru/api/api.php?module=study&method=timetable"),
+             ("lk-bogus", "https://lk.gubkin.ru/api/api.php?module=study&method=nosuchmethod"),
+             ("lk-schedule", "https://lk.gubkin.ru/api/api.php?module=schedule&method=get"),
+                          ("lk-api", "https://lk.gubkin.ru/api/api.php?module=auth&method=check")][:4]
     for name, url in steps:
         t0 = time.time()
         try:
