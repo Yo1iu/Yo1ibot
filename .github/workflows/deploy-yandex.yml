@@ -21,10 +21,24 @@ jobs:
         run: |
           set -Eeuo pipefail
           exec 2> >(tee "$RUNNER_TEMP/err.log" >&2)
-          trap 'echo "::error::Строка $LINENO: $BASH_COMMAND"; tail -5 "$RUNNER_TEMP/err.log" | while read -r l; do echo "::error::$l"; done' ERR
+          trap 'echo "::error::Строка $LINENO: $BASH_COMMAND"; grep -v -e trace -e client-trace "$RUNNER_TEMP/err.log" | head -5 | while read -r l; do echo "::error::$l"; done' ERR
           [ -n "$YC_SA_KEY" ] || { echo "::error::Нет секрета YC_SA_KEY"; exit 1; }
           [ -n "$BOT_TOKEN" ] || { echo "::error::Нет секрета BOT_TOKEN"; exit 1; }
-          printf '%s' "$YC_SA_KEY" > "$RUNNER_TEMP/key.json"
+          # починить ключ, если телефон заменил кавычки или переносы строк
+          python3 - <<'PY'
+          import json, os
+          raw = os.environ["YC_SA_KEY"].strip().lstrip("\ufeff")
+          for a, b in (("\u201c", '"'), ("\u201d", '"'), ("\u00ab", '"'), ("\u00bb", '"'), ("\u2018", "'"), ("\u2019", "'"), ("\u00a0", " ")):
+              raw = raw.replace(a, b)
+          try:
+              k = json.loads(raw, strict=False)
+          except Exception as e:
+              print(f"::error::Ключ YC_SA_KEY — не JSON ({type(e).__name__} на позиции {getattr(e, 'pos', '?')} из {len(raw)} символов). Начало: {raw[:12]!r}, конец: {raw[-8:]!r}")
+              raise SystemExit(1)
+          pk = k.get("private_key", "")
+          print(f"::notice::ключ: поля {sorted(k)}, private_key {len(pk)} симв., BEGIN={'BEGIN PRIVATE KEY' in pk}, END={'END PRIVATE KEY' in pk}")
+          json.dump(k, open(os.environ["RUNNER_TEMP"] + "/key.json", "w"))
+          PY
           yc config profile create bot >/dev/null
           yc config set service-account-key "$RUNNER_TEMP/key.json"
           SA_ID=$(jq -r .service_account_id "$RUNNER_TEMP/key.json")
