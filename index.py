@@ -97,39 +97,31 @@ def webhook(event):
 
 def diag():
     """Проверка доступа к сайту из облака (вызывается вручную событием {"diag": true})."""
-    import http.cookiejar
+    import http.cookiejar, re
     out = []
-    try:
-        out.append("ip " + urllib.request.urlopen("https://ipinfo.io/json", timeout=10).read().decode()[:160])
-    except Exception as ex:
-        out.append(f"ip ? {ex}")
-    variants = {
-        "desktop": {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36"},
-        "full": {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
-                 "Accept-Language": "ru-RU,ru;q=0.9,en;q=0.8", "Accept-Encoding": "identity",
-                 "Sec-Fetch-Site": "same-origin", "Sec-Fetch-Mode": "cors", "Sec-Fetch-Dest": "empty",
-                 "sec-ch-ua": '"Chromium";v="140", "Not=A?Brand";v="24", "Google Chrome";v="140"',
-                 "sec-ch-ua-mobile": "?0", "sec-ch-ua-platform": '"Windows"'},
-        "android": {"User-Agent": "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Mobile Safari/537.36"},
-    }
+    jar = http.cookiejar.CookieJar()
+    op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+    h = {"User-Agent": "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Mobile Safari/537.36",
+         "Referer": "https://lk.gubkin.ru/schedule/"}
+    page = op.open(urllib.request.Request("https://lk.gubkin.ru/schedule/", headers={**h, "Accept": "text/html"}), timeout=10).read().decode("utf-8", "replace")
+    scripts = re.findall(r"<script[^>]*>(.*?)</script>", page, re.S)
+    srcs = re.findall(r'<script[^>]+src="([^"]+)"', page)
+    out.append(f"srcs {srcs[:8]} inline={len(scripts)}")
+    for sc in scripts[:3]:
+        sc = " ".join(sc.split())
+        for i in range(0, min(len(sc), 900), 300):
+            out.append("js " + sc[i:i + 300])
     d = bot.now().date()
     api = f"https://lk.gubkin.ru/schedule/api/api.php?act=schedule&date={d.day}-{d.month}-{d.year}&groupId=9685"
-    for name, h in variants.items():
-        jar = http.cookiejar.CookieJar()
-        op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
-        for url, accept in (("https://lk.gubkin.ru/schedule/", "text/html,*/*"), (api, "application/json, text/plain, */*")):
-            req = urllib.request.Request(url, headers={**h, "Accept": accept, "Referer": "https://lk.gubkin.ru/schedule/"})
-            t0 = time.time()
-            try:
-                with op.open(req, timeout=8) as r:
-                    code, hdrs, body = r.status, r.headers, r.read(400)
-            except urllib.error.HTTPError as e:
-                code, hdrs, body = e.code, e.headers, e.read(400)
-            except Exception as ex:
-                code, hdrs, body = type(ex).__name__, {}, str(ex).encode()
-            server = hdrs.get("Server", "") if hdrs else ""
-            out.append(f"{name} {'html' if url.endswith('/') else 'api'} {code} {time.time() - t0:.1f}s server={server} "
-                       f"cookies={[c.name for c in jar]} body={body[:160].decode('utf-8', 'replace')!r}")
+    t0 = time.time()
+    try:
+        with op.open(urllib.request.Request(api, headers={**h, "Accept": "application/json, text/plain, */*"}), timeout=90) as r:
+            code, body = r.status, r.read(300)
+    except urllib.error.HTTPError as e:
+        code, body = e.code, e.read(300)
+    except Exception as ex:
+        code, body = type(ex).__name__, str(ex).encode()
+    out.append(f"api {code} {time.time() - t0:.1f}s cookies={[c.name for c in jar]} body={body.decode('utf-8', 'replace')!r}")
     return out
 
 

@@ -64,7 +64,7 @@ jobs:
           echo "::notice::этап: хранилище и функция созданы"
           zip -qj bot.zip index.py gubkin_bot.py gubkin_schedule.py
           timeout 300 yc serverless function version create --function-name gubkin-bot \
-            --runtime python312 --entrypoint index.handler --memory 128m --execution-timeout 120s \
+            --runtime python312 --entrypoint index.handler --memory 128m --execution-timeout 180s \
             --source-path bot.zip --service-account-id "$SA_ID" \
             --environment "BOT_TOKEN=$BOT_TOKEN,STATE_BUCKET=$BUCKET,WEBHOOK_SECRET=$SECRET" >/dev/null
 
@@ -84,6 +84,6 @@ jobs:
             -d '{"messages":[{"event_metadata":{"event_type":"yandex.cloud.events.serverless.triggers.TimerMessage"}}]}' >/dev/null || true
           sleep 5
           timeout 60 yc serverless function logs gubkin-bot --since 3m 2>/dev/null | grep -vE "^(START|END|REPORT)" | tail -5 | while read -r l; do echo "::notice::log $l"; done || true
-          timeout 120 yc serverless function invoke --name gubkin-bot -d '{"diag": true}' 2>/dev/null \
+          timeout 200 yc serverless function invoke --name gubkin-bot -d '{"diag": true}' 2>/dev/null \
             | jq -r '.body | fromjson | .[] | gsub("[\\n\\r ]+"; " ")' | while read -r l; do echo "::warning::diag $l"; done || true
           echo "::notice::готово, функция $FUNC_ID"
