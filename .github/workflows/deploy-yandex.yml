@@ -30,6 +30,10 @@ jobs:
           raw = os.environ["YC_SA_KEY"].strip().lstrip("\ufeff")
           for a, b in (("\u201c", '"'), ("\u201d", '"'), ("\u00ab", '"'), ("\u00bb", '"'), ("\u2018", "'"), ("\u2019", "'"), ("\u00a0", " ")):
               raw = raw.replace(a, b)
+          if not raw.startswith("{"):
+              raw = "{" + raw.rstrip(", \n")
+          if not raw.endswith("}"):
+              raw = raw.rstrip(", \n") + "}"
           try:
               k = json.loads(raw, strict=False)
           except Exception as e:
